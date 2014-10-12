@@ -1,18 +1,24 @@
--- webworld 0.1.0 by paramat
+-- webworld 0.1.1 by paramat
 -- For latest stable Minetest and back to 0.4.8
 -- Depends default
 -- License: code WTFPL
+
+-- thin surface materials above/below sea level
+-- create sea wall naturally by boosting density there
+-- TODO
+-- more biomes: rainforest
+-- pinetrees
+-- vary tree/grass density with noise
 
 -- Parameters
 
 local YMIN = -33000
 local YMAX = 33000
-local TRMIN = 0.1
-local TRMAX = 0.2
 local YWATER = 1
 local YSAND = 4
-local TERSCA = 256
-local TSTONE = 0.03 -- Stone density threshold, controls average depth of dirt/sand
+local TERSCA = 128
+local TSTONEMIN = 0.015 -- Stone density threshold minimum in floatlands
+local TSTONEMAX = 0.06 -- Stone density threshold at water level
 local TTUN = 0.02 -- Tunnel width
 local ORECHA = 1 / 5 ^ 3 -- Ore chance per stone node
 
@@ -28,9 +34,9 @@ local DRYCHA = 1 / 47 ^ 2 -- Dry shrub
 local np_realm = {
 	offset = 0,
 	scale = 1,
-	spread = {x=4096, y=4096, z=4096},
+	spread = {x=3072, y=3072, z=3072},
 	seed = 98320,
-	octaves = 2,
+	octaves = 3,
 	persist = 0.4
 }
 
@@ -39,9 +45,9 @@ local np_realm = {
 local np_terrain = {
 	offset = 0,
 	scale = 1,
-	spread = {x=384, y=128, z=384},
+	spread = {x=192, y=96, z=192},
 	seed = 593,
-	octaves = 5,
+	octaves = 4,
 	persist = 0.63
 }
 
@@ -50,9 +56,9 @@ local np_terrain = {
 local np_terralt = {
 	offset = 0,
 	scale = 1,
-	spread = {x=621, y=207, z=621},
+	spread = {x=311, y=155, z=311},
 	seed = 593,
-	octaves = 5,
+	octaves = 4,
 	persist = 0.63
 }
 
@@ -172,9 +178,10 @@ minetest.register_on_generated(function(minp, maxp, seed)
 			local n_terrain = nvals_terrain[nixyz]
 			local n_terralt = nvals_terralt[nixyz]
 			local grad = (YWATER - y) / TERSCA
-			local rprop = (math.min(math.max(math.abs(n_realm), TRMIN), TRMAX) - TRMIN) / (TRMAX - TRMIN)
-			local density = (n_terrain + n_terralt) * 0.5
-			+ grad * rprop
+			local rprop = (math.min(math.max(math.abs(n_realm), 0.1), 0.2) - 0.1) / 0.1
+			local boost = math.max(1 - math.abs(grad) / 2, 0) * math.max(1 - math.abs(n_realm - 0.2) * 20, 0) * 2
+			local density = (n_terrain + n_terralt) * 0.5 + boost + grad * rprop
+			-- rprop = 1 normal world. rprop = 0 webworld
 			
 			local n_biome = nvals_biome[nixyz]
 			local biome = false
@@ -186,9 +193,16 @@ minetest.register_on_generated(function(minp, maxp, seed)
 				biome = 2 -- forest / grassland
 			end
 			
-			local weba = math.abs(nvals_weba[nixyz]) < TTUN
+			local weba = math.abs(nvals_weba[nixyz]) < TTUN -- tunnels
 			local webb = math.abs(nvals_webb[nixyz]) < TTUN
 			local novoid = not (weba and webb)
+
+			local tstone -- thin surface materials
+			if y >= YWATER or rprop == 1 then
+				tstone = math.max(TSTONEMAX * (1 + grad), TSTONEMIN)
+			else -- thin to nothing in underworld
+				tstone = math.max(TSTONEMAX * (1 - grad), 0)
+			end
 			
 			if y == y0 - 1 then -- overgeneration, initialise tables
 				under[si] = 0
@@ -219,9 +233,8 @@ minetest.register_on_generated(function(minp, maxp, seed)
 					end
 				end
 			elseif y >= y0 and y <= y1 then
-				if novoid and density >= TSTONE
-				or (rprop > 0.9 and rprop < 1
-				and y > YWATER - TERSCA * 2 and y <= YWATER) then -- stone, ores
+				if novoid and density >= tstone then--or (rprop > 0.9 and rprop < 1
+				--and y > YWATER - TERSCA * 2 and y <= YWATER)) then -- stone, ores
 					if biome == 3 then
 						data[vi] = c_destone
 					elseif math.random() < ORECHA then
@@ -244,8 +257,8 @@ minetest.register_on_generated(function(minp, maxp, seed)
 					end
 					stable[si] = stable[si] + 1
 					under[si] = 0
-				elseif density >= 0 and density < TSTONE and stable[si] >= 2 then -- fine materials
-					if rprop == 1 and y <= YSAND then
+				elseif density >= 0 and density < tstone and stable[si] >= 2 then -- fine materials
+					if y <= YSAND and rprop > 0.9 then
 						data[vi] = c_sand
 						under[si] = 0
 					elseif biome == 3 then
@@ -282,7 +295,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 					end
 					stable[si] = 0
 					under[si] = 0
-				elseif density < TSTONE and y - y0 == 16 and biome ~= 3
+				elseif density < tstone and y - y0 == 16 and biome ~= 3
 				and y > 1024 then -- clouds
 					local xrq = 16 * math.floor((x - x0) / 16)
 					local zrq = 16 * math.floor((z - z0) / 16)
@@ -293,7 +306,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 					end
 					stable[si] = 0
 					under[si] = 0
-				elseif rprop == 1 and y <= YWATER and density < TSTONE then -- water
+				elseif rprop == 1 and y <= YWATER and density < tstone then -- water
 					data[vi] = c_watersour
 					stable[si] = 0
 					under[si] = 0
