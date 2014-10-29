@@ -93,17 +93,77 @@ minetest.register_node("webworld:cactus", {
 	on_place = minetest.rotate_node
 })
 
-minetest.register_node("webworld:cloud", {
-	description = "Cloud",
-	drawtype = "glasslike",
-	tiles = {"webworld_cloud.png"},
+minetest.register_node("webworld:pinetree", {
+	description = "Pine tree",
+	tiles = {"webworld_pinetreetop.png", "webworld_pinetreetop.png", "webworld_pinetree.png"},
+	paramtype2 = "facedir",
+	is_ground_content = false,
+	groups = {tree=1,choppy=2,oddly_breakable_by_hand=1,flammable=2},
+	sounds = default.node_sound_wood_defaults(),
+	on_place = minetest.rotate_node
+})
+
+minetest.register_node("webworld:needles", {
+	description = "Pine needles",
+	drawtype = "allfaces_optional",
+	visual_scale = 1.3,
+	tiles = {"webworld_needles.png"},
 	paramtype = "light",
 	is_ground_content = false,
-	sunlight_propagates = true,
-	walkable = false,
-	pointable = false,
-	diggable = false,
-	buildable_to = true,
-	post_effect_color = {a=63, r=241, g=248, b=255},
+	groups = {snappy=3},
+	drop = {
+		max_items = 1,
+		items = {
+			{items = {"webworld:pineling"}, rarity = 20},
+			{items = {"webworld:needles"}}
+		}
+	},
+	sounds = default.node_sound_leaves_defaults(),
 })
+
+minetest.register_node("webworld:pineling", {
+	description = "Pine sapling",
+	drawtype = "plantlike",
+	visual_scale = 1.0,
+	tiles = {"webworld_pineling.png"},
+	inventory_image = "webworld_pineling.png",
+	wield_image = "webworld_pineling.png",
+	paramtype = "light",
+	walkable = false,
+	is_ground_content = false,
+	selection_box = {
+		type = "fixed",
+		fixed = {-0.3, -0.5, -0.3, 0.3, 0.35, 0.3}
+	},
+	groups = {snappy=2,dig_immediate=3,flammable=2,attached_node=1},
+	sounds = default.node_sound_leaves_defaults(),
+})
+
+minetest.register_node("webworld:pinewood", {
+	description = "Pine wood planks",
+	tiles = {"webworld_pinewood.png"},
+	groups = {choppy=2,oddly_breakable_by_hand=2,flammable=3,wood=1},
+	sounds = default.node_sound_wood_defaults(),
+})
+
+-- Crafting
+
+minetest.register_craft({
+	output = "webworld:pinewood 4",
+	recipe = {
+		{"webworld:pinetree"},
+	}
+})
+
+-- Register stairs and slabs
+
+stairs.register_stair_and_slab(
+	"pinewood",
+	"webworld:pinewood",
+	{snappy=2,choppy=2,oddly_breakable_by_hand=2,flammable=3},
+	{"webworld_pinewood.png"},
+	"Pinewood stair",
+	"Pinewood slab",
+	default.node_sound_wood_defaults()
+)
 
