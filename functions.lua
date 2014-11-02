@@ -42,6 +42,53 @@ function webworld_cactus(x, y, z, area, data)
 	end
 end
 
+function webworld_pinetree(x, y, z, area, data)
+	local c_pinetree = minetest.get_content_id("webworld:pinetree")
+	local c_needles = minetest.get_content_id("webworld:needles")
+	for j = -4, 14 do
+		if j == 3 or j == 6 or j == 9 or j == 12 then
+			for k = -2, 2 do
+				local vi = area:index(x - 2, y + j, z + k)
+				for i = -2, 2 do
+					if math.abs(i) == 1 and math.abs(k) == 1 then
+						data[vi] = c_pinetree
+					elseif math.abs(i) + math.abs(k) == 2
+					or math.abs(i) + math.abs(k) == 3 then
+						data[vi] = c_needles
+					end
+					vi = vi + 1
+				end
+			end
+		elseif j == 4 or j == 7 or j == 10 or j == 13 then
+			for k = -1, 1 do
+				local vi = area:index(x - 1, y + j, z + k)
+				for i = -1, 1 do
+					if not (i == 0 and j == 0) then
+						data[vi] = c_needles
+					end
+					vi = vi + 1
+				end
+			end
+		elseif j == 14 then
+			for k = -1, 1 do
+				local vi = area:index(x - 1, y + j, z + k)
+				for i = -1, 1 do
+					if math.abs(i) + math.abs(k) == 1 then
+						data[vi] = c_needles
+					end
+					vi = vi + 1
+				end
+			end
+		end
+		local vi = area:index(x, y + j, z)
+		data[vi] = c_pinetree
+	end
+	local vi = area:index(x, y + 15, z)
+	local via = area:index(x, y + 16, z)
+	data[vi] = c_needles
+	data[via] = c_needles
+end
+
 function webworld_snowypine(x, y, z, area, data)
 	local c_pinetree = minetest.get_content_id("webworld:pinetree")
 	local c_needles = minetest.get_content_id("webworld:needles")

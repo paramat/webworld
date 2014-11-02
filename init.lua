@@ -1,22 +1,26 @@
--- webworld 0.1.1 by paramat
+-- webworld 0.1.2 by paramat
 -- For latest stable Minetest and back to 0.4.8
 -- Depends default
 -- License: code WTFPL
 
--- wider sea wall
--- add snowypines
--- 16 node calculate plus 1 node scan stability
+-- terrainalt noise to 5 octaves
+-- snow on stone and beach
+-- vary sandline
+-- seaice in very cold areas
+-- stable = 4 for more stone exposure
+-- pines above y = 47 in forest
 
 -- Parameters
 
 local YMIN = -33000
 local YMAX = 33000
 local YWATER = 1
-local YSAND = 4
-local TERSCA = 128
-local STABLE = 3
+local YSANDAV = 4
+local SANDAMP = 3
+local TERSCA = 192
+local STABLE = 4 -- minimum stone nodes in column for dirt/sand above
 local TSTONEMIN = 0.015 -- Stone density threshold minimum in floatlands
-local TSTONEMAX = 0.06 -- Stone density threshold at water level
+local TSTONEMAX = 0.04 -- Stone density threshold at water level
 local TTUN = 0.02 -- Tunnel width
 local ORECHA = 1 / 5 ^ 3 -- Ore chance per stone node
 
@@ -51,9 +55,9 @@ local np_terrain = {
 local np_terralt = {
 	offset = 0,
 	scale = 1,
-	spread = {x=311, y=155, z=311},
+	spread = {x=621, y=311, z=621},
 	seed = 593,
-	octaves = 4,
+	octaves = 5,
 	persist = 0.63
 }
 
@@ -82,9 +86,9 @@ local np_webb = {
 local np_biome = {
 	offset = 0,
 	scale = 1,
-	spread = {x=512, y=512, z=512},
+	spread = {x=1536, y=1536, z=1536},
 	seed = -188900,
-	octaves = 2,
+	octaves = 3,
 	persist = 0.4
 }
 
@@ -134,6 +138,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local c_sand = minetest.get_content_id("default:sand")
 	local c_snowblock = minetest.get_content_id("default:snowblock")
 	local c_dirtsnow = minetest.get_content_id("default:dirt_with_snow")
+	local c_ice = minetest.get_content_id("default:ice")
 	local c_stodiam = minetest.get_content_id("default:stone_with_diamond")
 	local c_stomese = minetest.get_content_id("default:stone_with_mese")
 	local c_stogold = minetest.get_content_id("default:stone_with_gold")
@@ -187,8 +192,10 @@ minetest.register_on_generated(function(minp, maxp, seed)
 					biome = 2 -- forest / grassland
 				end
 				
-				local weba = math.abs(nvals_weba[nixyz]) < TTUN
-				local webb = math.abs(nvals_webb[nixyz]) < TTUN
+				local n_weba = nvals_weba[nixyz]
+				local n_webb = nvals_webb[nixyz]
+				local weba = math.abs(n_weba) < TTUN
+				local webb = math.abs(n_webb) < TTUN
 				local novoid = not (weba and webb)
 	
 				local tstone
@@ -250,10 +257,11 @@ minetest.register_on_generated(function(minp, maxp, seed)
 							data[vi] = c_stone
 						end
 						stable[si] = stable[si] + 1
-						under[si] = 0
+						under[si] = 5
 					elseif density >= 0 and density < tstone
 					and stable[si] >= STABLE then
-						if y <= YSAND and rprop > 0.8 then
+						if y <= YSANDAV + n_weba * SANDAMP
+						and rprop > 0.8 then
 							data[vi] = c_sand
 							under[si] = 4
 						elseif biome == 1 then
@@ -276,8 +284,11 @@ minetest.register_on_generated(function(minp, maxp, seed)
 								data[vi] = c_snowblock
 							end
 						elseif under[si] == 2 then
-							if math.random() < APPCHA * n_forest then
+							if y <= 47 and math.random() < APPCHA * n_forest then
 								webworld_appletree(x, y, z, area, data)
+							elseif y <= 127 and y >= 48 and
+							math.random() < PINCHA * n_forest then
+								webworld_pinetree(x, y, z, area, data)
 							else
 								data[viu] = c_grass
 							end
@@ -285,12 +296,22 @@ minetest.register_on_generated(function(minp, maxp, seed)
 							if math.random() < CACCHA * n_forest then
 								webworld_cactus(x, y, z, area, data)
 							end
+						elseif under[si] == 4 then
+							if biome == 1 then
+								data[vi] = c_snowblock
+							end
+						elseif under[si] == 5 and biome == 1 and grad < 1 then
+							data[vi] = c_snowblock
 						end
 						stable[si] = 0
 						under[si] = 0
 					elseif rprop > 0.99 and y <= YWATER
 					and density < tstone then
-						data[vi] = c_watersour
+						if n_biome < -0.8 then
+							data[vi] = c_ice
+						else
+							data[vi] = c_watersour
+						end
 						stable[si] = 0
 						under[si] = 0
 					else
