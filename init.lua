@@ -1,26 +1,27 @@
--- webworld 0.1.2 by paramat
+-- webworld 0.2.0 by paramat
 -- For latest stable Minetest and back to 0.4.8
 -- Depends default
 -- License: code WTFPL
 
--- terrainalt noise to 5 octaves
--- snow on stone and beach
--- vary sandline
--- seaice in very cold areas
--- stable = 4 for more stone exposure
--- pines above y = 47 in forest
+-- add riverdev river system
 
 -- Parameters
 
 local YMIN = -33000
 local YMAX = 33000
 local YWATER = 1
+local YZERO = -64
+local BASAMP = 0.3 -- Base amplitude relative to 3D noise amplitude. Ridge network structure
+local MIDAMP = 0.1 -- Mid amplitude relative to 3D noise amplitude. River valley structure
+local TERSCA = 512
+
 local YSANDAV = 4
 local SANDAMP = 3
-local TERSCA = 192
+local TRIVER = -0.019 -- River depth
+local TRSAND = -0.02 -- Depth of river sand
 local STABLE = 4 -- minimum stone nodes in column for dirt/sand above
-local TSTONEMIN = 0.015 -- Stone density threshold minimum in floatlands
-local TSTONEMAX = 0.04 -- Stone density threshold at water level
+local TSTONEMIN = 0.01 -- Stone density threshold minimum in floatlands
+local TSTONEMAX = 0.02 -- Stone density threshold at water level
 local TTUN = 0.02 -- Tunnel width
 local ORECHA = 1 / 5 ^ 3 -- Ore chance per stone node
 
@@ -33,8 +34,30 @@ local PINCHA = 1 / 6 ^ 2 -- Pinetree ^
 local np_realm = {
 	offset = 0,
 	scale = 1,
-	spread = {x=8192, y=8192, z=8192},
+	spread = {x=4096, y=4096, z=4096},
 	seed = 98320,
+	octaves = 3,
+	persist = 0.4
+}
+
+-- 2D noise for mid terrain / river
+
+local np_mid = {
+	offset = 0,
+	scale = 1,
+	spread = {x=1536, y=1536, z=1536},
+	seed = 85546,
+	octaves = 6,
+	persist = 0.4
+}
+
+-- 2D noise for base terrain / humidity
+
+local np_base = {
+	offset = 0,
+	scale = 1,
+	spread = {x=1536, y=1536, z=1536},
+	seed = -990054,
 	octaves = 3,
 	persist = 0.4
 }
@@ -55,9 +78,9 @@ local np_terrain = {
 local np_terralt = {
 	offset = 0,
 	scale = 1,
-	spread = {x=621, y=311, z=621},
+	spread = {x=311, y=155, z=311},
 	seed = 593,
-	octaves = 5,
+	octaves = 4,
 	persist = 0.63
 }
 
@@ -132,6 +155,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local c_destone = minetest.get_content_id("webworld:desertstone")
 	local c_dirt = minetest.get_content_id("webworld:dirt")
 	local c_grass = minetest.get_content_id("webworld:grass")
+	local c_freshwater = minetest.get_content_id("webworld:freshwater")
 	
 	local c_ignore = minetest.get_content_id("ignore")
 	local c_desand = minetest.get_content_id("default:desert_sand")
@@ -148,18 +172,24 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local c_watersour = minetest.get_content_id("default:water_source")
 	
 	local sidelen = x1 - x0 + 1
-	local chulens = {x=sidelen, y=sidelen+16, z=sidelen}
+	local chulensxyz = {x=sidelen, y=sidelen+16, z=sidelen}
 	local minposxyz = {x=x0, y=y0-15, z=z0}
+	local chulensxz = {x=sidelen, y=sidelen, z=sidelen} -- different because here x=x, y=z
+	local minposxz = {x=x0, y=z0}
 	
-	local nvals_realm = minetest.get_perlin_map(np_realm, chulens):get3dMap_flat(minposxyz)
-	local nvals_terrain = minetest.get_perlin_map(np_terrain, chulens):get3dMap_flat(minposxyz)
-	local nvals_terralt = minetest.get_perlin_map(np_terralt, chulens):get3dMap_flat(minposxyz)
-	local nvals_weba = minetest.get_perlin_map(np_weba, chulens):get3dMap_flat(minposxyz)
-	local nvals_webb = minetest.get_perlin_map(np_webb, chulens):get3dMap_flat(minposxyz)
-	local nvals_biome = minetest.get_perlin_map(np_biome, chulens):get3dMap_flat(minposxyz)
-	local nvals_forest = minetest.get_perlin_map(np_forest, chulens):get3dMap_flat(minposxyz)
+	local nvals_realm = minetest.get_perlin_map(np_realm, chulensxyz):get3dMap_flat(minposxyz)
+	local nvals_terrain = minetest.get_perlin_map(np_terrain, chulensxyz):get3dMap_flat(minposxyz)
+	local nvals_terralt = minetest.get_perlin_map(np_terralt, chulensxyz):get3dMap_flat(minposxyz)
+	local nvals_weba = minetest.get_perlin_map(np_weba, chulensxyz):get3dMap_flat(minposxyz)
+	local nvals_webb = minetest.get_perlin_map(np_webb, chulensxyz):get3dMap_flat(minposxyz)
+	local nvals_biome = minetest.get_perlin_map(np_biome, chulensxyz):get3dMap_flat(minposxyz)
+	local nvals_forest = minetest.get_perlin_map(np_forest, chulensxyz):get3dMap_flat(minposxyz)
+
+	local nvals_mid = minetest.get_perlin_map(np_mid, chulensxz):get2dMap_flat(minposxz)
+	local nvals_base = minetest.get_perlin_map(np_base, chulensxz):get2dMap_flat(minposxz)
 
 	local nixyz = 1
+	local nixz = 1
 	local stable = {}
 	local under = {}
 	for z = z0, z1 do
@@ -174,13 +204,23 @@ minetest.register_on_generated(function(minp, maxp, seed)
 				local si = x - x0 + 1
 				
 				local n_realm = nvals_realm[nixyz]
+				local n_mid = math.abs(nvals_mid[nixz]) ^ 0.8
+				local n_base = math.abs(nvals_base[nixz]) ^ 0.8
+				local n_invbase = math.max(1 - n_base, 0)
 				local n_terrain = nvals_terrain[nixyz]
 				local n_terralt = nvals_terralt[nixyz]
-				local grad = (YWATER - y) / TERSCA
+				local n_floatmix = (n_terrain + n_terralt) * 0.5
+				local n_mountmix = (n_floatmix + 2) / 4 -- 0 to 1
+				local grad = (YZERO - y) / TERSCA
+				local densitybase = n_invbase * BASAMP + grad -- river base surface
+				local densitymid = n_mid * MIDAMP + densitybase -- river valley surface
+				-- rprop = 1 normal world. rprop = 0 webworld
 				local rprop =
 				(math.min(math.max(math.abs(n_realm), 0.04), 0.08) - 0.04) / 0.04
-				local density = (n_terrain + n_terralt) * 0.5 + grad * rprop
-				-- rprop = 1 normal world. rprop = 0 webworld
+				local density = -- actual surface
+				(n_mountmix * n_base ^ 1.5 * n_mid ^ 1.5 + densitymid) * rprop
+				+ n_floatmix * (1 - rprop)
+
 				
 				local n_biome = nvals_biome[nixyz]
 				local biome = false
@@ -197,7 +237,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 				local weba = math.abs(n_weba) < TTUN
 				local webb = math.abs(n_webb) < TTUN
 				local novoid = not (weba and webb)
-	
+
 				local tstone
 				if y >= YWATER or rprop > 0.9 then
 					tstone = math.max(TSTONEMAX * (1 + grad), TSTONEMIN)
@@ -206,6 +246,8 @@ minetest.register_on_generated(function(minp, maxp, seed)
 				end
 				
 				local n_forest = math.min(math.max(nvals_forest[nixyz], 0), 1)
+				local triver = TRIVER * n_base
+				local trsand = TRSAND * n_base
 	
 				if y < y0 then
 					under[si] = 0
@@ -219,10 +261,11 @@ minetest.register_on_generated(function(minp, maxp, seed)
 						if nodid == c_stone
 						or nodid == c_destone
 						or nodid == c_dirt
+						or nodid == c_sand
+						or nodid == c_desand
 						or nodid == c_grass
 						or nodid == c_dirtsnow
 						or nodid == c_snowblock
-						or nodid == c_desand
 						or nodid == c_stodiam
 						or nodid == c_stomese
 						or nodid == c_stogold
@@ -260,7 +303,8 @@ minetest.register_on_generated(function(minp, maxp, seed)
 						under[si] = 5
 					elseif density >= 0 and density < tstone
 					and stable[si] >= STABLE then
-						if y <= YSANDAV + n_weba * SANDAMP
+						if (y <= YSANDAV + n_weba * SANDAMP
+						or densitybase >= trsand)
 						and rprop > 0.8 then
 							data[vi] = c_sand
 							under[si] = 4
@@ -274,6 +318,20 @@ minetest.register_on_generated(function(minp, maxp, seed)
 							data[vi] = c_desand
 							under[si] = 3
 						end
+					elseif rprop > 0.99 and y <= YWATER
+					and density < tstone then
+						if n_biome < -0.8 then
+							data[vi] = c_ice
+						else
+							data[vi] = c_watersour
+						end
+						stable[si] = 0
+						under[si] = 0
+					elseif densitybase >= triver and density < tstone
+					and rprop > 0.99 then -- river water
+						data[vi] = c_freshwater
+						stable[si] = 0
+						under[si] = 0
 					elseif density < 0 and (y > YWATER or rprop < 1)
 					and under[si] ~= 0 then
 						if under[si] == 1 then
@@ -305,21 +363,13 @@ minetest.register_on_generated(function(minp, maxp, seed)
 						end
 						stable[si] = 0
 						under[si] = 0
-					elseif rprop > 0.99 and y <= YWATER
-					and density < tstone then
-						if n_biome < -0.8 then
-							data[vi] = c_ice
-						else
-							data[vi] = c_watersour
-						end
-						stable[si] = 0
-						under[si] = 0
 					else
 						stable[si] = 0
 						under[si] = 0
 					end
 				elseif y == y1 + 1 then
-					if density < 0 and under[si] ~= 0 then
+					if density < 0 and (y > YWATER or rprop < 1)
+					and under[si] ~= 0 then
 						if under[si] == 1 then
 							if math.random() < PINCHA * n_forest then
 								webworld_snowypine(x, y, z, area, data)
@@ -341,10 +391,13 @@ minetest.register_on_generated(function(minp, maxp, seed)
 					end
 				end
 				nixyz = nixyz + 1
+				nixz = nixz + 1
 				vi = vi + 1
 				viu = viu + 1
 			end
+			nixz = nixz - sidelen
 		end
+		nixz = nixz + sidelen
 	end
 	
 	vm:set_data(data)
