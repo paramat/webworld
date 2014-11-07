@@ -1,9 +1,10 @@
--- webworld 0.2.1 by paramat
+-- webworld 0.2.2 by paramat
 -- For latest stable Minetest and back to 0.4.8
 -- Depends default
 -- License: code WTFPL
 
--- tune
+-- fix crash in desert
+-- sandstone and ores in strata
 
 -- Parameters
 
@@ -18,9 +19,9 @@ local TERSCA = 256
 local YSANDAV = 4
 local SANDAMP = 3
 local TRIVER = -0.03 -- River depth
-local TRSAND = -0.032 -- Depth of river sand
+local TRSAND = -0.033 -- Depth of river sand
 local STABLE = 4 -- minimum stone nodes in column for dirt/sand above
-local TSTONE = 0.01 -- Stone density threshold. Maximum depth of dirt/sand
+local TSTONE = 0.02 -- Stone density threshold. Maximum depth of dirt/sand
 local TTUN = 0.02 -- Tunnel width
 local ORECHA = 1 / 5 ^ 3 -- Ore chance per stone node
 
@@ -125,6 +126,17 @@ local np_forest = {
 	persist = 0.7
 }
 
+-- 3D noise for strata layering
+
+local np_strata = {
+	offset = 0,
+	scale = 1,
+	spread = {x=3072, y=48, z=3072},
+	seed = 92219,
+	octaves = 4,
+	persist = 1
+}
+
 -- Stuff
 
 dofile(minetest.get_modpath("webworld").."/functions.lua")
@@ -162,6 +174,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local c_snowblock = minetest.get_content_id("default:snowblock")
 	local c_dirtsnow = minetest.get_content_id("default:dirt_with_snow")
 	local c_ice = minetest.get_content_id("default:ice")
+	local c_sandstone = minetest.get_content_id("default:sandstone")
 	local c_stodiam = minetest.get_content_id("default:stone_with_diamond")
 	local c_stomese = minetest.get_content_id("default:stone_with_mese")
 	local c_stogold = minetest.get_content_id("default:stone_with_gold")
@@ -183,6 +196,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 	local nvals_webb = minetest.get_perlin_map(np_webb, chulensxyz):get3dMap_flat(minposxyz)
 	local nvals_biome = minetest.get_perlin_map(np_biome, chulensxyz):get3dMap_flat(minposxyz)
 	local nvals_forest = minetest.get_perlin_map(np_forest, chulensxyz):get3dMap_flat(minposxyz)
+	local nvals_strata = minetest.get_perlin_map(np_strata, chulensxyz):get3dMap_flat(minposxyz)
 
 	local nvals_mid = minetest.get_perlin_map(np_mid, chulensxz):get2dMap_flat(minposxz)
 	local nvals_base = minetest.get_perlin_map(np_base, chulensxz):get2dMap_flat(minposxz)
@@ -205,20 +219,20 @@ minetest.register_on_generated(function(minp, maxp, seed)
 				
 				local n_realm = nvals_realm[nixyz]
 				local n_mid = math.abs(nvals_mid[nixz]) ^ 0.8
-				local n_base = math.abs(nvals_base[nixz]) ^ 0.8
+				local n_base = math.abs(nvals_base[nixz])
 				local n_invbase = 1 - n_base
 				local n_liminvbase = math.max(1 - n_base, 0)
 				local n_terrain = nvals_terrain[nixyz]
 				local n_terralt = nvals_terralt[nixyz]
 				local n_floatmix = (n_terrain + n_terralt) * 0.5
-				local n_mountmix = (n_floatmix + 2) / 2
+				local n_mountmix = n_floatmix + 1
 				local grad = (YZERO - y) / TERSCA
-				local densitybase = n_invbase * BASAMP + grad -- ridges surface
-				local densitymid = n_mid * MIDAMP + densitybase -- river valley surface
+				local densitybase = n_invbase * BASAMP + grad
+				local densitymid = n_mid * MIDAMP * n_base + densitybase
 				local rprop =
 				(math.min(math.max(math.abs(n_realm), 0.04), 0.08) - 0.04) / 0.04
-				-- rprop = 1 normal world. rprop = 0 webworld
-				local density = -- actual surface
+				-- rprop = 1 normal world, rprop = 0 floatlands
+				local density =
 				(n_mountmix * n_liminvbase * n_mid + densitymid) * rprop
 				+ n_floatmix * (1 - rprop)
 				
@@ -240,14 +254,18 @@ minetest.register_on_generated(function(minp, maxp, seed)
 
 				local tstone
 				if rprop > 0.9 then -- normal world
-					tstone = math.max(TSTONE * (1 + grad), 0)
+					tstone = TSTONE * (1 + grad)
 				else
-					tstone = math.min(math.max(TSTONE * (1 - grad * 4), 0), 1)
+					tstone = math.min(TSTONE * (1 - grad * 4), 1)
+				end
+				if tstone < TSTONE / 8 then
+					tstone = 0
 				end
 				
 				local n_forest = math.min(math.max(nvals_forest[nixyz], 0), 1)
 				local triver = TRIVER * n_base
 				local trsand = TRSAND * n_base
+				local n_strata = math.abs(nvals_strata[nixyz])
 	
 				if y < y0 then -- calculate mapchunk below, count stone
 					if density >= tstone then
@@ -275,12 +293,12 @@ minetest.register_on_generated(function(minp, maxp, seed)
 						end
 					end
 				elseif y >= y0 and y <= y1 then
-					if novoid -- stone and ores
+					if novoid -- stones and ores
 					and (density >= tstone or (rprop > 0.6 and rprop < 1
 					and y > YWATER - TERSCA * 2 and y <= YWATER)) then
-						if biome == 3 and density < TSTONEMAX * 8 then
-							data[vi] = c_destone
-						elseif math.random() < ORECHA then
+						if n_strata < 0.2 then -- sandstone strata
+							data[vi] = c_sandstone
+						elseif n_strata > 0.35 and n_strata < 0.4 then -- ore strata
 							local osel = math.random(24)
 							if osel == 24 then
 								data[vi] = c_stodiam
@@ -295,14 +313,16 @@ minetest.register_on_generated(function(minp, maxp, seed)
 							else
 								data[vi] = c_stocoal
 							end
+						elseif biome == 3 and density < 1 then
+							data[vi] = c_destone -- desert stone
 						else
 							data[vi] = c_stone
 						end
 						stable[si] = stable[si] + 1
 						under[si] = 5
-					elseif density >= 0 and density < tstone -- fine material
+					elseif density >= 0 and density < tstone -- fine materials
 					and stable[si] >= STABLE then
-						if (y <= YSANDAV + n_weba * SANDAMP
+						if (y <= YSANDAV + n_weba * SANDAMP -- sand
 						or densitybase >= trsand)
 						and rprop > 0.8 then
 							data[vi] = c_sand
@@ -331,7 +351,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 						data[vi] = c_freshwater
 						stable[si] = 0
 						under[si] = 0
-					elseif density < 0 and (y > YWATER or rprop < 1) -- surface material
+					elseif density < 0 and (y > YWATER or rprop < 1) -- surface materials
 					and under[si] ~= 0 then
 						if under[si] == 1 then
 							if math.random() < PINCHA * n_forest then
@@ -368,7 +388,7 @@ minetest.register_on_generated(function(minp, maxp, seed)
 						under[si] = 0
 					end
 				elseif y == y1 + 1 then -- overgeneration
-					if density < 0 and (y > YWATER or rprop < 1) -- surface material
+					if density < 0 and (y > YWATER or rprop < 1) -- surface materials
 					and under[si] ~= 0 then
 						if under[si] == 1 then
 							if math.random() < PINCHA * n_forest then
