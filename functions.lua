@@ -148,6 +148,49 @@ function webworld_snowypine(x, y, z, area, data)
 	data[viaa] = c_snowblock
 end
 
+function webworld_jungletree(x, y, z, area, data, y1)
+	local c_juntree = minetest.get_content_id("default:jungletree")
+	local c_junleaf = minetest.get_content_id("webworld:jungleleaf")
+	local c_vine = minetest.get_content_id("webworld:vine")
+	local top = math.random(13, math.min(y1 + 16 - y, 23)) -- avoid chopped trees
+	local branch = math.floor(top * 0.6)
+	for j = -5, top do
+		if j == top or j == top - 1 or j == branch + 1 or j == branch + 2 then
+			for i = -2, 2 do -- leaves
+			for k = -2, 2 do
+				local vi = area:index(x + i, y + j, z + k)
+				if math.random(5) ~= 2 then
+					data[vi] = c_junleaf
+				end
+			end
+			end
+		elseif j == top - 2 or j == branch then -- branches
+			for i = -1, 1 do
+			for k = -1, 1 do
+				if math.abs(i) + math.abs(k) == 2 then
+					local vi = area:index(x + i, y + j, z + k)
+					data[vi] = c_juntree
+				end
+			end
+			end
+		end
+		if j >= 0 and j <= top - 3 then -- climbable nodes
+			for i = -1, 1 do
+			for k = -1, 1 do
+				if math.abs(i) + math.abs(k) == 1 then
+					local vi = area:index(x + i, y + j, z + k)
+					data[vi] = c_vine
+				end
+			end
+			end
+		end
+		if j <= top - 3 then -- trunk
+			local vi = area:index(x, y + j, z)
+			data[vi] = c_juntree
+		end
+	end
+end
+
 -- ABM
 
 -- Appletree sapling
@@ -193,6 +236,31 @@ minetest.register_abm({
 		local data = vm:get_data()
 
 		webworld_snowypine(x, y, z, area, data)
+
+		vm:set_data(data)
+		vm:write_to_map()
+		vm:update_map()
+	end,
+})
+
+-- Jungletree sapling
+
+minetest.register_abm({
+	nodenames = {"webworld:jungling"},
+	interval = 30,
+	chance = 5,
+	action = function(pos, node)
+		local x = pos.x
+		local y = pos.y
+		local z = pos.z
+		local vm = minetest.get_voxel_manip()
+		local pos1 = {x=x-2, y=y-5, z=z-2}
+		local pos2 = {x=x+2, y=y+23, z=z+2}
+		local emin, emax = vm:read_from_map(pos1, pos2)
+		local area = VoxelArea:new({MinEdge=emin, MaxEdge=emax})
+		local data = vm:get_data()
+		-- check temp/humid
+		webworld_jungletree(x, y, z, area, data)
 
 		vm:set_data(data)
 		vm:write_to_map()

@@ -146,6 +146,55 @@ minetest.register_node("webworld:pinewood", {
 	sounds = default.node_sound_wood_defaults(),
 })
 
+minetest.register_node("webworld:jungleleaf", {
+	description = "Jungletree leaves",
+	drawtype = "allfaces_optional",
+	visual_scale = 1.3,
+	tiles = {"default_jungleleaves.png"},
+	paramtype = "light",
+	is_ground_content = false,
+	groups = {snappy=3, flammable=2, leaves=1},
+	drop = {
+		max_items = 1,
+		items = {
+			{items = {"webworld:jungling"},rarity = 20},
+			{items = {"webworld:jungleleaf"}}
+		}
+	},
+	sounds = default.node_sound_leaves_defaults(),
+})
+
+minetest.register_node("webworld:vine", {
+	description = "Jungletree vine",
+	drawtype = "airlike",
+	paramtype = "light",
+	walkable = false,
+	climbable = true,
+	pointable = false,
+	diggable = false,
+	buildable_to = true,
+	is_ground_content = false,
+	groups = {not_in_creative_inventory=1},
+})
+
+minetest.register_node("webworld:jungling", {
+	description = "Jungletree sapling",
+	drawtype = "plantlike",
+	visual_scale = 1.0,
+	tiles = {"default_junglesapling.png"},
+	inventory_image = "default_junglesapling.png",
+	wield_image = "default_junglesapling.png",
+	paramtype = "light",
+	walkable = false,
+	is_ground_content = false,
+	selection_box = {
+		type = "fixed",
+		fixed = {-0.3, -0.5, -0.3, 0.3, 0.35, 0.3}
+	},
+	groups = {snappy=2,dig_immediate=3,flammable=2,attached_node=1},
+	sounds = default.node_sound_leaves_defaults(),
+})
+
 minetest.register_node("webworld:freshwater", {
 	description = "Fresh Water Source",
 	inventory_image = minetest.inventorycube("webworld_freshwater.png"),
